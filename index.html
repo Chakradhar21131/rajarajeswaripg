@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PG Management (Admin + Tenant)</title>
+  <style>
+    :root { font-family: Arial, sans-serif; }
+    body { margin: 0; background:#f6f7fb; color:#111; }
+    header { background:#111827; color:#fff; padding:16px; }
+    header h1 { margin:0; font-size:18px; }
+    .wrap { max-width:1100px; margin: 0 auto; padding: 16px; }
+    .grid { display:grid; gap:16px; grid-template-columns: 1fr; }
+    @media (min-width: 900px){ .grid { grid-template-columns: 360px 1fr; } }
+
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+    .card h2 { margin:0 0 12px; font-size:16px; }
+    label { display:block; font-size:12px; margin: 10px 0 6px; color:#374151; }
+    input, select, textarea {
+      width: 100%; box-sizing:border-box;
+      border:1px solid #d1d5db; border-radius:10px; padding:10px;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color:#6366f1; }
+    button {
+      border:0; border-radius:10px; padding:10px 12px;
+      background:#4f46e5; color:#fff; cursor:pointer;
+      font-weight:600;
+    }
+    button.secondary{ background:#111827; }
+    button.danger{ background:#dc2626; }
+    button.gray{ background:#6b7280; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row > * { flex:1; min-width: 140px; }
+    .muted { color:#6b7280; font-size:12px; }
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; }
+    .tab { background:#e5e7eb; color:#111; padding:8px 10px; border-radius:999px; cursor:pointer; font-size:12px; font-weight:700; }
+    .tab.active { background:#4f46e5; color:#fff; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #e5e7eb; font-size:13px; vertical-align:top; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+    .pill.pending { background:#fef3c7; color:#92400e; }
+    .pill.approved { background:#dcfce7; color:#166534; }
+    .pill.rejected { background:#fee2e2; color:#991b1b; }
+    .notice { background:#eff6ff; border:1px solid #bfdbfe; padding:10px; border-radius:12px; font-size:13px; }
+    .reminder { background:#fff7ed; border:1px solid #fed7aa; padding:10px; border-radius:12px; margin-top:10px; }
+    .small { font-size:12px; }
+    .hide { display:none; }
+    code { background:#f3f4f6; padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+
+<body>
+<header>
+  <div class="wrap">
+    <h1>PG Management — Admin Approval + Rent Reminder Automation</h1>
+    <div class="muted">Demo uses LocalStorage (single file HTML). Admin approves tenants after registration.</div>
+  </div>
+</header>
+
+<div class="wrap grid">
+  <!-- LEFT: Auth + Registration -->
+  <div class="card">
+    <h2>Login</h2>
+    <div class="tabs">
+      <div class="tab active" id="tabTenant" onclick="setLoginMode('tenant')">Tenant Login</div>
+      <div class="tab" id="tabAdmin" onclick="setLoginMode('admin')">Admin Login</div>
+    </div>
+
+    <div id="tenantLoginBox">
+      <label>Tenant Email</label>
+      <input id="tenantEmail" type="email" placeholder="tenant@gmail.com" />
+      <label>Password</label>
+      <input id="tenantPass" type="password" placeholder="password" />
+      <div class="row" style="margin-top:12px;">
+        <button onclick="tenantLogin()">Login</button>
+        <button class="gray" onclick="logout()">Logout</button>
+      </div>
+      <div class="muted" style="margin-top:10px;">Tenant can login only after Admin approves.</div>
+    </div>
+
+    <div id="adminLoginBox" class="hide">
+      <label>Admin Username</label>
+      <input id="adminUser" type="text" placeholder="admin" />
+      <label>Admin Password</label>
+      <input id="adminPass" type="password" placeholder="admin123" />
+      <div class="row" style="margin-top:12px;">
+        <button class="secondary" onclick="adminLogin()">Admin Login</button>
+        <button class="gray" onclick="logout()">Logout</button>
+      </div>
+      <div class="muted" style="margin-top:10px;">Default: <code>admin</code> / <code>admin123</code></div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
+
+    <h2>Tenant Registration</h2>
+    <div class="notice">
+      After registration, tenant goes to <b>Pending</b> → Admin must <b>Approve</b>.
+    </div>
+
+    <label>Full Name</label>
+    <input id="regName" type="text" placeholder="Chakradhar" />
+
+    <div class="row">
+      <div>
+        <label>Phone</label>
+        <input id="regPhone" type="tel" placeholder="9XXXXXXXXX" />
+      </div>
+      <div>
+        <label>Email</label>
+        <input id="regEmail" type="email" placeholder="tenant@gmail.com" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Password</label>
+        <input id="regPass" type="password" placeholder="Create password" />
+      </div>
+      <div>
+        <label>Room</label>
+        <input id="regRoom" type="text" placeholder="A-101" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Sharing Type</label>
+        <select id="regSharing">
+          <option value="2 Sharing">2 Sharing</option>
+          <option value="4 Sharing">4 Sharing</option>
+          <option value="6 Sharing">6 Sharing</option>
+        </select>
+      </div>
+      <div>
+        <label>Monthly Rent (₹)</label>
+        <input id="regRent" type="number" placeholder="6500" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Due Day (1-28)</label>
+        <input id="regDueDay" type="number" min="1" max="28" value="5" />
+      </div>
+      <div>
+        <label>Reminder Days Before</label>
+        <select id="regReminderBefore">
+          <option value="3">3 days</option>
+          <option value="5">5 days</option>
+          <option value="7" selected>7 days</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Notes (optional)</label>
+    <textarea id="regNotes" rows="2" placeholder="Any notes..."></textarea>
+
+    <div class="row" style="margin-top:12px;">
+      <button onclick="registerTenant()">Register</button>
+      <button class="danger" onclick="resetAll()">Reset Data</button>
+    </div>
+
+    <div class="muted" style="margin-top:10px;">
+      Tip: Approvals & reminders are saved in your browser storage.
+    </div>
+  </div>
+
+  <!-- RIGHT: Dashboard -->
+  <div class="card">
+    <h2>Dashboard</h2>
+    <div id="sessionInfo" class="notice">Not logged in.</div>
+
+    <!-- ADMIN PANEL -->
+    <div id="adminPanel" class="hide">
+      <h2 style="margin-top:16px;">Admin Panel</h2>
+
+      <div class="row">
+        <button class="secondary" onclick="seedSample()">Add sample tenants</button>
+        <button class="gray" onclick="requestNotifyPermission()">Enable browser notifications</button>
+      </div>
+
+      <h3 style="margin:16px 0 8px;font-size:14px;">Tenants</h3>
+      <div style="overflow:auto;">
+        <table id="tenantsTable"></table>
+      </div>
+
+      <h3 style="margin:16px 0 8px;font-size:14px;">Rent Reminder Automation</h3>
+      <div class="notice">
+        This demo runs reminders <b>when this page is open</b> (checks every minute).<br/>
+        For real automation (even when closed), use backend cron / server.
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button onclick="runReminderCheck(true)">Run Reminder Check Now</button>
+        <button class="gray" onclick="toggleEmailJS()">Toggle EmailJS (Optional)</button>
+      </div>
+
+      <div id="emailjsBox" class="reminder hide">
+        <b>EmailJS Setup (Optional)</b>
+        <div class="small">This lets you send reminder emails without backend (still needs page open to trigger).</div>
+        <div class="small">Create account at EmailJS → get Service ID, Template ID, Public Key.</div>
+        <label>Service ID</label><input id="emailjsService" placeholder="service_xxx">
+        <label>Template ID</label><input id="emailjsTemplate" placeholder="template_xxx">
+        <label>Public Key</label><input id="emailjsKey" placeholder="public_xxx">
+        <div class="row" style="margin-top:10px;">
+          <button onclick="saveEmailJS()">Save EmailJS</button>
+          <button class="gray" onclick="testEmailJS()">Send Test Email to Admin</button>
+        </div>
+        <div class="muted" style="margin-top:8px;">
+          You must edit your EmailJS template variables according to the code comments inside <code>sendEmailJS()</code>.
+        </div>
+      </div>
+
+      <div id="reminderLog" class="reminder">
+        <b>Reminder Log</b>
+        <div class="muted">Latest reminders will appear here.</div>
+        <div id="reminderItems"></div>
+      </div>
+    </div>
+
+    <!-- TENANT PANEL -->
+    <div id="tenantPanel" class="hide">
+      <h2 style="margin-top:16px;">Tenant Panel</h2>
+      <div class="notice" id="tenantDetails"></div>
+
+      <div class="row" style="margin-top:10px;">
+        <button class="gray" onclick="requestNotifyPermission()">Enable browser notifications</button>
+        <button onclick="markPaid()">Mark This Month Paid</button>
+      </div>
+
+      <div class="reminder" id="tenantReminderBox" style="margin-top:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * Storage schema:
+ * tenants: [
+ *  {id, name, phone, email, pass, room, sharing, rent, dueDay, reminderBefore, notes, status, createdAt, lastPaidYYYYMM}
+ * ]
+ * session: { role: 'admin'|'tenant', tenantId?: string }
+ * settings: { emailjs: {enabled, serviceId, templateId, publicKey} }
+ */
+
+const LS_TENANTS = "pg_tenants_v1";
+const LS_SESSION = "pg_session_v1";
+const LS_SETTINGS = "pg_settings_v1";
+
+function uid(){ return "t_" + Math.random().toString(16).slice(2) + Date.now().toString(16); }
+function nowISO(){ return new Date().toISOString(); }
+function getMonthKey(d=new Date()){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  return `${y}${m}`;
+}
+function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+function loadTenants(){
+  try { return JSON.parse(localStorage.getItem(LS_TENANTS)) || []; }
+  catch(e){ return []; }
+}
+function saveTenants(list){ localStorage.setItem(LS_TENANTS, JSON.stringify(list)); }
+
+function loadSession(){
+  try { return JSON.parse(localStorage.getItem(LS_SESSION)) || null; }
+  catch(e){ return null; }
+}
+function saveSession(s){ localStorage.setItem(LS_SESSION, JSON.stringify(s)); }
+function clearSession(){ localStorage.removeItem(LS_SESSION); }
+
+function loadSettings(){
+  try {
+    return JSON.parse(localStorage.getItem(LS_SETTINGS)) || { emailjs: { enabled:false, serviceId:"", templateId:"", publicKey:"" } };
+  } catch(e){
+    return { emailjs: { enabled:false, serviceId:"", templateId:"", publicKey:"" } };
+  }
+}
+function saveSettings(s){ localStorage.setItem(LS_SETTINGS, JSON.stringify(s)); }
+
+let loginMode = "tenant";
+function setLoginMode(mode){
+  loginMode = mode;
+  document.getElementById("tabTenant").classList.toggle("active", mode==="tenant");
+  document.getElementById("tabAdmin").classList.toggle("active", mode==="admin");
+  document.getElementById("tenantLoginBox").classList.toggle("hide", mode!=="tenant");
+  document.getElementById("adminLoginBox").classList.toggle("hide", mode!=="admin");
+}
+
+function registerTenant(){
+  const name = document.getElementById("regName").value.trim();
+  const phone = document.getElementById("regPhone").value.trim();
+  const email = document.getElementById("regEmail").value.trim().toLowerCase();
+  const pass = document.getElementById("regPass").value;
+  const room = document.getElementById("regRoom").value.trim();
+  const sharing = document.getElementById("regSharing").value;
+  const rent = Number(document.getElementById("regRent").value || 0);
+  const dueDay = clamp(Number(document.getElementById("regDueDay").value || 5), 1, 28);
+  const reminderBefore = Number(document.getElementById("regReminderBefore").value || 7);
+  const notes = document.getElementById("regNotes").value.trim();
+
+  if(!name || !phone || !email || !pass || !room || !rent){
+    alert("Please fill Name, Phone, Email, Password, Room, Rent.");
+    return;
+  }
+
+  const tenants = loadTenants();
+  if(tenants.some(t => t.email === email)){
+    alert("This email is already registered.");
+    return;
+  }
+
+  tenants.push({
+    id: uid(),
+    name, phone, email, pass,
+    room, sharing, rent,
+    dueDay, reminderBefore,
+    notes,
+    status: "Pending",
+    createdAt: nowISO(),
+    lastPaidYYYYMM: "" // empty means not paid yet
+  });
+
+  saveTenants(tenants);
+  alert("Registered successfully! Admin approval pending.");
+  renderAll();
+}
+
+function adminLogin(){
+  const u = document.getElementById("adminUser").value.trim();
+  const p = document.getElementById("adminPass").value;
+  if(u==="admin" && p==="admin123"){
+    saveSession({ role:"admin" });
+    renderAll();
+  } else {
+    alert("Invalid admin credentials. Default is admin/admin123");
+  }
+}
+
+function tenantLogin(){
+  const email = document.getElementById("tenantEmail").value.trim().toLowerCase();
+  const pass = document.getElementById("tenantPass").value;
+  const tenants = loadTenants();
+  const t = tenants.find(x => x.email===email);
+
+  if(!t){ alert("Tenant not found. Please register first."); return; }
+  if(t.status !== "Approved"){ alert("Your account is not approved yet. Please contact admin."); return; }
+  if(t.pass !== pass){ alert("Wrong password."); return; }
+
+  saveSession({ role:"tenant", tenantId: t.id });
+  renderAll();
+}
+
+function logout(){
+  clearSession();
+  renderAll();
+}
+
+function resetAll(){
+  if(!confirm("This will delete all tenants and settings from your browser. Continue?")) return;
+  localStorage.removeItem(LS_TENANTS);
+  localStorage.removeItem(LS_SETTINGS);
+  clearSession();
+  renderAll();
+}
+
+function approveTenant(id){
+  const tenants = loadTenants();
+  const t = tenants.find(x=>x.id===id);
+  if(!t) return;
+  t.status="Approved";
+  saveTenants(tenants);
+  renderAll();
+}
+
+function rejectTenant(id){
+  const tenants = loadTenants();
+  const t = tenants.find(x=>x.id===id);
+  if(!t) return;
+  t.status="Rejected";
+  saveTenants(tenants);
+  renderAll();
+}
+
+function deleteTenant(id){
+  if(!confirm("Delete this tenant?")) return;
+  const tenants = loadTenants().filter(x=>x.id!==id);
+  saveTenants(tenants);
+  renderAll();
+}
+
+function markPaid(){
+  const session = loadSession();
+  if(!session || session.role!=="tenant") return;
+  const tenants = loadTenants();
+  const t = tenants.find(x=>x.id===session.tenantId);
+  if(!t) return;
+  t.lastPaidYYYYMM = getMonthKey();
+  saveTenants(tenants);
+  renderAll();
+  alert("Marked paid for this month.");
+}
+
+function seedSample(){
+  const tenants = loadTenants();
+  if(tenants.length>0 && !confirm("This will add sample tenants along with existing. Continue?")) return;
+
+  tenants.push(
+    { id:uid(), name:"Ravi", phone:"9000000001", email:"ravi@mail.com", pass:"1234", room:"A-101", sharing:"2 Sharing", rent:6500, dueDay:5, reminderBefore:7, notes:"", status:"Approved", createdAt:nowISO(), lastPaidYYYYMM:"" },
+    { id:uid(), name:"Sita", phone:"9000000002", email:"sita@mail.com", pass:"1234", room:"B-201", sharing:"4 Sharing", rent:4500, dueDay:10, reminderBefore:5, notes:"", status:"Pending", createdAt:nowISO(), lastPaidYYYYMM:"" }
+  );
+  saveTenants(tenants);
+  renderAll();
+}
+
+/** ---------- Reminder Automation ---------- **/
+
+function daysUntilDue(dueDay){
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-based
+  const due = new Date(year, month, dueDay, 9, 0, 0); // 9AM
+  // If due date already passed in this month, consider next month due date
+  if(due < now){
+    const dueNext = new Date(year, month+1, dueDay, 9, 0, 0);
+    return Math.ceil((dueNext - now) / (1000*60*60*24));
+  }
+  return Math.ceil((due - now) / (1000*60*60*24));
+}
+
+function shouldRemindTenant(t){
+  if(t.status !== "Approved") return { remind:false, reason:"Not approved" };
+
+  const monthKey = getMonthKey();
+  const paid = (t.lastPaidYYYYMM === monthKey);
+  if(paid) return { remind:false, reason:"Already paid" };
+
+  const remaining = daysUntilDue(t.dueDay);
+  // remind if within reminder window, or overdue
+  if(remaining <= t.reminderBefore){
+    return { remind:true, remaining };
+  }
+  return { remind:false, remaining };
+}
+
+function pushReminderUI(msg){
+  const box = document.getElementById("reminderItems");
+  const p = document.createElement("div");
+  p.className = "small";
+  p.textContent = `[${new Date().toLocaleString()}] ${msg}`;
+  box.prepend(p);
+}
+
+function notifyBrowser(title, body){
+  if(!("Notification" in window)) return;
+  if(Notification.permission !== "granted") return;
+  new Notification(title, { body });
+}
+
+function requestNotifyPermission(){
+  if(!("Notification" in window)){
+    alert("Browser notifications not supported here.");
+    return;
+  }
+  Notification.requestPermission().then(p=>{
+    alert("Notification permission: " + p);
+  });
+}
+
+function runReminderCheck(isManual=false){
+  const session = loadSession();
+  // only admin triggers full scan; tenant sees their own reminders
+  const tenants = loadTenants();
+
+  if(session && session.role==="admin"){
+    const dueList = [];
+    tenants.forEach(t=>{
+      const r = shouldRemindTenant(t);
+      if(r.remind){
+        const txt = (r.remaining <= 0)
+          ? `${t.name} (${t.room}) rent is OVERDUE!`
+          : `${t.name} (${t.room}) rent due in ${r.remaining} day(s).`;
+        dueList.push({ tenant:t, text:txt, remaining:r.remaining });
+      }
+    });
+
+    if(dueList.length===0){
+      if(isManual) pushReminderUI("No reminders right now.");
+      return;
+    }
+
+    dueList.forEach(item=>{
+      pushReminderUI(item.text);
+      notifyBrowser("PG Rent Reminder", item.text);
+      // optional EmailJS
+      const settings = loadSettings();
+      if(settings.emailjs.enabled){
+        sendEmailJS({
+          to_email: item.tenant.email,
+          tenant_name: item.tenant.name,
+          room: item.tenant.room,
+          rent: item.tenant.rent,
+          due_day: item.tenant.dueDay,
+          remaining_days: item.remaining,
+          message: item.text
+        });
+      }
+    });
+
+  } else if(session && session.role==="tenant"){
+    // tenant panel will render reminder box separately
+    // still show notification if due soon
+    const t = tenants.find(x=>x.id===session.tenantId);
+    if(!t) return;
+    const r = shouldRemindTenant(t);
+    if(r.remind){
+      const txt = (r.remaining <= 0)
+        ? `Your rent is OVERDUE! Please pay and mark paid.`
+        : `Your rent is due in ${r.remaining} day(s). Please pay on time.`;
+      notifyBrowser("Rent Reminder", txt);
+    }
+  }
+}
+
+/** ---------- Optional EmailJS ---------- **/
+function toggleEmailJS(){
+  document.getElementById("emailjsBox").classList.toggle("hide");
+}
+
+function saveEmailJS(){
+  const serviceId = document.getElementById("emailjsService").value.trim();
+  const templateId = document.getElementById("emailjsTemplate").value.trim();
+  const publicKey = document.getElementById("emailjsKey").value.trim();
+  if(!serviceId || !templateId || !publicKey){
+    alert("Fill Service ID, Template ID, Public Key.");
+    return;
+  }
+  const s = loadSettings();
+  s.emailjs = { enabled:true, serviceId, templateId, publicKey };
+  saveSettings(s);
+  alert("EmailJS saved & enabled.");
+}
+
+function testEmailJS(){
+  const s = loadSettings();
+  if(!s.emailjs.enabled){
+    alert("Enable EmailJS and save keys first.");
+    return;
+  }
+  sendEmailJS({
+    to_email: "YOUR_ADMIN_EMAIL_HERE",
+    tenant_name: "Test Tenant",
+    room: "A-101",
+    rent: 6500,
+    due_day: 5,
+    remaining_days: 2,
+    message: "This is a test rent reminder."
+  });
+  alert("Test email triggered (check EmailJS logs).");
+}
+
+function loadEmailJSScript(cb){
+  if(window.emailjs) return cb();
+  const sc = document.createElement("script");
+  sc.src = "https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js";
+  sc.onload = cb;
+  document.head.appendChild(sc);
+}
+
+function sendEmailJS(vars){
+  const settings = loadSettings();
+  const { serviceId, templateId, publicKey } = settings.emailjs;
+  loadEmailJSScript(()=>{
+    // init
+    window.emailjs.init({ publicKey });
+
+    /**
+     * IMPORTANT:
+     * In EmailJS template, create variables like:
+     * {{to_email}}, {{tenant_name}}, {{room}}, {{rent}}, {{due_day}}, {{remaining_days}}, {{message}}
+     */
+    window.emailjs.send(serviceId, templateId, vars)
+      .then(()=> {
+        pushReminderUI("Email sent via EmailJS to " + vars.to_email);
+      })
+      .catch((err)=> {
+        pushReminderUI("EmailJS error: " + (err?.text || JSON.stringify(err)));
+      });
+  });
+}
+
+/** ---------- UI Rendering ---------- **/
+function renderAdminTable(){
+  const tenants = loadTenants();
+  const t = document.getElementById("tenantsTable");
+  if(tenants.length===0){
+    t.innerHTML = "<tr><td class='muted'>No tenants yet. Register on left or add sample tenants.</td></tr>";
+    return;
+  }
+  t.innerHTML = `
+    <tr>
+      <th>Name</th><th>Room</th><th>Sharing</th><th>Rent</th><th>Status</th><th>Due</th><th>Paid</th><th>Actions</th>
+    </tr>
+  `;
+
+  const monthKey = getMonthKey();
+  tenants.forEach(x=>{
+    const paid = (x.lastPaidYYYYMM === monthKey) ? "Yes" : "No";
+    const statusClass = x.status.toLowerCase();
+    const r = shouldRemindTenant(x);
+    const dueText = (r.remaining===undefined) ? "-" : (r.remaining<=0 ? "Overdue" : `${r.remaining}d`);
+    t.innerHTML += `
+      <tr>
+        <td><b>${escapeHtml(x.name)}</b><div class="muted">${escapeHtml(x.email)}<br/>${escapeHtml(x.phone)}</div></td>
+        <td>${escapeHtml(x.room)}</td>
+        <td>${escapeHtml(x.sharing)}</td>
+        <td>₹${Number(x.rent).toLocaleString()}</td>
+        <td><span class="pill ${statusClass}">${escapeHtml(x.status)}</span></td>
+        <td>${dueText}</td>
+        <td>${paid}</td>
+        <td>
+          <div class="row" style="gap:6px;">
+            <button class="secondary" onclick="approveTenant('${x.id}')">Approve</button>
+            <button class="gray" onclick="rejectTenant('${x.id}')">Reject</button>
+            <button class="danger" onclick="deleteTenant('${x.id}')">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+function renderTenantPanel(){
+  const session = loadSession();
+  const tenants = loadTenants();
+  const t = tenants.find(x=>x.id===session.tenantId);
+  const box = document.getElementById("tenantDetails");
+  const rem = document.getElementById("tenantReminderBox");
+
+  if(!t){
+    box.textContent = "Tenant not found.";
+    rem.textContent = "";
+    return;
+  }
+
+  box.innerHTML = `
+    <b>${escapeHtml(t.name)}</b> — Room: <b>${escapeHtml(t.room)}</b><br/>
+    Sharing: ${escapeHtml(t.sharing)} | Rent: ₹${Number(t.rent).toLocaleString()} / month<br/>
+    Due Day: <b>${t.dueDay}</b> | Reminder: <b>${t.reminderBefore}</b> days before
+  `;
+
+  const monthKey = getMonthKey();
+  const paid = (t.lastPaidYYYYMM === monthKey);
+
+  const r = shouldRemindTenant(t);
+  if(paid){
+    rem.innerHTML = `<b>Status:</b> Paid for this month ✅`;
+  } else if(r.remind){
+    const txt = (r.remaining<=0)
+      ? `Your rent is <b>OVERDUE</b>. Please pay ASAP.`
+      : `Your rent is due in <b>${r.remaining} day(s)</b>. Please pay on time.`;
+    rem.innerHTML = `<b>Reminder:</b> ${txt}`;
+  } else {
+    rem.innerHTML = `<b>No reminder now.</b> Rent due in about <b>${r.remaining}</b> day(s).`;
+  }
+}
+
+function renderAll(){
+  const session = loadSession();
+  const info = document.getElementById("sessionInfo");
+  const adminPanel = document.getElementById("adminPanel");
+  const tenantPanel = document.getElementById("tenantPanel");
+
+  if(!session){
+    info.innerHTML = "Not logged in.";
+    adminPanel.classList.add("hide");
+    tenantPanel.classList.add("hide");
+    renderAdminTable();
+    return;
+  }
+
+  if(session.role==="admin"){
+    info.innerHTML = `<b>Logged in as:</b> Admin`;
+    adminPanel.classList.remove("hide");
+    tenantPanel.classList.add("hide");
+    renderAdminTable();
+    // run reminders (admin scan)
+    runReminderCheck(false);
+  }
+
+  if(session.role==="tenant"){
+    info.innerHTML = `<b>Logged in as:</b> Tenant`;
+    adminPanel.classList.add("hide");
+    tenantPanel.classList.remove("hide");
+    renderTenantPanel();
+    // run reminders (tenant)
+    runReminderCheck(false);
+  }
+
+  // load EmailJS settings into inputs
+  const settings = loadSettings();
+  document.getElementById("emailjsService").value = settings.emailjs.serviceId || "";
+  document.getElementById("emailjsTemplate").value = settings.emailjs.templateId || "";
+  document.getElementById("emailjsKey").value = settings.emailjs.publicKey || "";
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+/** Run automation every minute (only works while tab open) **/
+setInterval(()=>runReminderCheck(false), 60*1000);
+
+// initial render
+renderAll();
+</script>
+</body>
+</html>
