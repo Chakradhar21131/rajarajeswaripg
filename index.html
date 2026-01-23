@@ -41,7 +41,9 @@
 <header>
   <div class="wrap">
     <h1>SRI RAJARAJESWARI PG — Tenant Manager (Firebase + WhatsApp + PDF Receipt)</h1>
-    <div class="muted">Cloud save (Firestore). Manual WhatsApp reminder + Mark Paid + PDF rent receipt download.</div>
+    <div class="muted">
+      Address: Hennagara Main Road, Kithaganahalli, Anekal Taluk, Bengaluru - 560099
+    </div>
   </div>
 </header>
 
@@ -132,6 +134,10 @@
     <div class="muted" style="margin-top:10px;">
       If permission error: Firestore Rules must be <b>Test mode</b> now.
     </div>
+
+    <div class="muted" style="margin-top:10px;">
+      Logo: Upload your logo file as <b>logo.png</b> in GitHub repo root.
+    </div>
   </div>
 
   <!-- RIGHT -->
@@ -176,7 +182,7 @@
     </div>
 
     <div class="muted" style="margin-top:10px;">
-      Receipt: Click <b>Mark Paid</b> → then <b>Receipt PDF</b> download → WhatsApp lo attach chesi send cheyyi.
+      Receipt numbering: <b>SRRPG-YYYYMM-001</b> (monthly reset). Mark Paid → Receipt PDF → WhatsApp Receipt Msg → attach PDF.
     </div>
   </div>
 </div>
@@ -187,15 +193,18 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
   import {
-    getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, serverTimestamp
+    getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc,
+    serverTimestamp, runTransaction, getDoc, setDoc
   } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-  /* ---------------- SETTINGS YOU CAN CHANGE ---------------- */
+  /* ---------------- SETTINGS ---------------- */
   const PG_NAME = "SRI RAJARAJESWARI PG";
+  const PG_ADDRESS = "Hennagara Main Road, Kithaganahalli, Anekal Taluk, Bengaluru - 560099";
+  const LOGO_PATH = "logo.png"; // upload logo.png in repo root
+
   const ADMIN_USER = "admin";
   const ADMIN_PASS = "admin123";
 
-  // Firebase config (yours)
   const firebaseConfig = {
     apiKey: "AIzaSyDc1VMtz85nJ_bV8QZ3FMMZDUJSX8qj4m0",
     authDomain: "rajarajeswaripg-7ee87.firebaseapp.com",
@@ -212,8 +221,8 @@
   const tenantsCol = collection(db, "tenants");
 
   /* ---------------- Local settings ---------------- */
-  const LS_SESSION = "pg_admin_session_v2";
-  const LS_TPL = "pg_msg_tpl_v2";
+  const LS_SESSION = "pg_admin_session_v3";
+  const LS_TPL = "pg_msg_tpl_v3";
 
   const $ = (id)=>document.getElementById(id);
 
@@ -305,7 +314,6 @@
   async function addTenant(data){
     await addDoc(tenantsCol, {
       ...data,
-      // payment fields
       lastPaidYYYYMM: data.lastPaidYYYYMM || "",
       lastPaidDate: data.lastPaidDate || "",
       lastPaidMethod: data.lastPaidMethod || "",
@@ -320,6 +328,28 @@
 
   async function removeTenant(id){
     await deleteDoc(doc(db, "tenants", id));
+  }
+
+  /* ---------------- Monthly receipt counter (Firestore) ----------------
+     counters/{YYYYMM} => { seq: number }
+  */
+  async function getNextReceiptNumber(yyyymm){
+    const counterRef = doc(db, "counters", yyyymm);
+
+    const nextSeq = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(counterRef);
+      if(!snap.exists()){
+        tx.set(counterRef, { seq: 1 });
+        return 1;
+      }
+      const curr = Number(snap.data().seq || 0);
+      const next = curr + 1;
+      tx.update(counterRef, { seq: next });
+      return next;
+    });
+
+    const seqStr = String(nextSeq).padStart(3,"0"); // 001,002...
+    return `SRRPG-${yyyymm}-${seqStr}`;
   }
 
   /* ---------------- Form actions ---------------- */
@@ -420,11 +450,12 @@
   function waReceiptText(t){
     const mk = t.lastPaidYYYYMM || monthKey();
     const monthTxt = monthLabelFromYYYYMM(mk) || "this month";
-    const receiptNo = t.lastReceiptNo || buildReceiptNo(t, mk);
+    const receiptNo = t.lastReceiptNo || "SRRPG-YYYYMM-001";
     const paidDate = t.lastPaidDate || todayDDMMYYYY();
     const method = t.lastPaidMethod || "UPI";
     return `RENT RECEIPT ✅
 PG: ${PG_NAME}
+Address: ${PG_ADDRESS}
 Name: ${t.name || ""}
 Room: ${t.room || ""}
 Month: ${monthTxt}
@@ -442,11 +473,16 @@ Receipt No: ${receiptNo}
     return `https://wa.me/${phone}?text=${text}`;
   }
 
-  /* ---------------- Payment + Receipt ---------------- */
-  function buildReceiptNo(t, yyyymm){
-    // deterministic unique-ish receipt number (no extra DB counter needed)
-    const tail = (t.id || "").slice(-4).toUpperCase();
-    return `SRRPG-${yyyymm}-${tail || "0000"}`;
+  /* ---------------- Paid + Receipt ---------------- */
+  async function toDataURL(url){
+    const res = await fetch(url, {cache:"no-store"});
+    if(!res.ok) throw new Error("Logo fetch failed: " + res.status);
+    const blob = await res.blob();
+    return await new Promise((resolve)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
   }
 
   window.markPaid = async function(id){
@@ -464,17 +500,19 @@ Receipt No: ${receiptNo}
     const method = prompt("Payment method (Cash / UPI / Bank)", t.lastPaidMethod || "UPI");
     if(!method) return;
 
-    const receiptNo = buildReceiptNo(t, mk);
-
     try{
+      // Monthly sequential receipt no
+      const receiptNo = await getNextReceiptNumber(mk);
+
       await updateTenant(id, {
         lastPaidYYYYMM: mk,
         lastPaidDate: paidDate,
         lastPaidMethod: method,
         lastReceiptNo: receiptNo
       });
+
       await refresh();
-      alert("Marked paid ✅ Now click Receipt PDF to download.");
+      alert("Marked paid ✅ Receipt No: " + receiptNo + " (Now click Receipt PDF)");
     }catch(e){
       console.error(e);
       alert("Mark paid failed. Check Firestore rules.");
@@ -482,19 +520,23 @@ Receipt No: ${receiptNo}
     }
   };
 
-  window.generateReceiptPDF = function(id){
+  window.generateReceiptPDF = async function(id){
     if(!isLoggedIn()){ alert("Admin login first."); return; }
     const t = TENANTS.find(x=>x.id===id);
     if(!t) return;
 
-    const mk = t.lastPaidYYYYMM || monthKey();
+    if(!t.lastPaidYYYYMM){
+      alert("First click Mark Paid, then generate receipt.");
+      return;
+    }
+
+    const mk = t.lastPaidYYYYMM;
     const monthTxt = monthLabelFromYYYYMM(mk) || "Month";
-    const receiptNo = t.lastReceiptNo || buildReceiptNo(t, mk);
+    const receiptNo = t.lastReceiptNo || "SRRPG-YYYYMM-001";
     const paidDate = t.lastPaidDate || todayDDMMYYYY();
     const method = t.lastPaidMethod || "UPI";
     const amount = t.rent || "";
 
-    // jsPDF
     const { jsPDF } = window.jspdf || {};
     if(!jsPDF){
       alert("PDF library not loaded. Refresh page and try again.");
@@ -504,68 +546,88 @@ Receipt No: ${receiptNo}
     const docPdf = new jsPDF({ unit:"pt", format:"a4" });
 
     const marginX = 40;
-    let y = 50;
+    let y = 45;
 
+    // Header box
+    docPdf.setDrawColor(220);
+    docPdf.setFillColor(248, 250, 252);
+    docPdf.roundedRect(marginX, y, 515, 90, 10, 10, "FD");
+
+    // Logo (optional)
+    try{
+      const logoData = await toDataURL(LOGO_PATH);
+      // if PNG, use "PNG"
+      docPdf.addImage(logoData, "PNG", marginX+12, y+12, 66, 66);
+    }catch(e){
+      // if logo missing, ignore
+    }
+
+    // Title
     docPdf.setFont("helvetica","bold");
     docPdf.setFontSize(16);
-    docPdf.text(PG_NAME, marginX, y);
+    docPdf.text(PG_NAME, marginX+90, y+30);
 
     docPdf.setFont("helvetica","normal");
-    docPdf.setFontSize(11);
-    y += 18;
-    docPdf.text("RENT RECEIPT", marginX, y);
+    docPdf.setFontSize(10);
+    docPdf.text(PG_ADDRESS, marginX+90, y+50, { maxWidth: 440 });
 
-    y += 18;
-    docPdf.setDrawColor(200);
-    docPdf.line(marginX, y, 555, y);
-
-    y += 22;
     docPdf.setFont("helvetica","bold");
+    docPdf.setFontSize(13);
+    docPdf.text("RENT RECEIPT", marginX+90, y+75);
+
+    y += 120;
+
+    // Details
+    docPdf.setFont("helvetica","bold"); docPdf.setFontSize(11);
     docPdf.text("Receipt No:", marginX, y);
     docPdf.setFont("helvetica","normal");
-    docPdf.text(String(receiptNo), marginX+90, y);
+    docPdf.text(String(receiptNo), marginX+95, y);
 
     y += 18;
     docPdf.setFont("helvetica","bold");
-    docPdf.text("Date:", marginX, y);
+    docPdf.text("Paid Date:", marginX, y);
     docPdf.setFont("helvetica","normal");
-    docPdf.text(String(paidDate), marginX+90, y);
-
-    y += 22;
-    docPdf.setFont("helvetica","bold");
-    docPdf.text("Tenant Name:", marginX, y);
-    docPdf.setFont("helvetica","normal");
-    docPdf.text(String(t.name || ""), marginX+90, y);
-
-    y += 18;
-    docPdf.setFont("helvetica","bold");
-    docPdf.text("Phone:", marginX, y);
-    docPdf.setFont("helvetica","normal");
-    docPdf.text(String(t.phone || ""), marginX+90, y);
-
-    y += 18;
-    docPdf.setFont("helvetica","bold");
-    docPdf.text("Room:", marginX, y);
-    docPdf.setFont("helvetica","normal");
-    docPdf.text(String(t.room || ""), marginX+90, y);
-
-    y += 18;
-    docPdf.setFont("helvetica","bold");
-    docPdf.text("Sharing:", marginX, y);
-    docPdf.setFont("helvetica","normal");
-    docPdf.text(String(t.sharing || ""), marginX+90, y);
+    docPdf.text(String(paidDate), marginX+95, y);
 
     y += 18;
     docPdf.setFont("helvetica","bold");
     docPdf.text("Month:", marginX, y);
     docPdf.setFont("helvetica","normal");
-    docPdf.text(String(monthTxt), marginX+90, y);
+    docPdf.text(String(monthTxt), marginX+95, y);
+
+    y += 22;
+    docPdf.setDrawColor(235);
+    docPdf.line(marginX, y, 555, y);
+
+    y += 24;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Tenant Name:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.name || ""), marginX+95, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Phone:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.phone || ""), marginX+95, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Room:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.room || ""), marginX+95, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Sharing:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.sharing || ""), marginX+95, y);
 
     y += 18;
     docPdf.setFont("helvetica","bold");
     docPdf.text("Amount Paid:", marginX, y);
     docPdf.setFont("helvetica","normal");
-    docPdf.text(`₹${amount}`, marginX+90, y);
+    docPdf.text(`₹${amount}`, marginX+95, y);
 
     y += 18;
     docPdf.setFont("helvetica","bold");
@@ -573,18 +635,33 @@ Receipt No: ${receiptNo}
     docPdf.setFont("helvetica","normal");
     docPdf.text(String(method), marginX+110, y);
 
-    y += 22;
-    docPdf.setDrawColor(230);
+    y += 26;
+    docPdf.setDrawColor(235);
     docPdf.line(marginX, y, 555, y);
 
-    y += 30;
-    docPdf.setFont("helvetica","normal");
-    docPdf.setFontSize(11);
-    docPdf.text("This is a computer-generated receipt.", marginX, y);
+    // Footer stamp-like box
+    y += 26;
+    docPdf.setDrawColor(200);
+    docPdf.setFillColor(255, 255, 255);
+    docPdf.roundedRect(marginX, y, 515, 110, 10, 10, "FD");
 
-    y += 60;
-    docPdf.text("Authorized Signatory", 420, y);
-    docPdf.line(420, y-12, 555, y-12);
+    docPdf.setFont("helvetica","bold");
+    docPdf.setFontSize(12);
+    docPdf.text("Authorized Stamp", marginX+18, y+28);
+
+    docPdf.setFont("helvetica","normal");
+    docPdf.setFontSize(10);
+    docPdf.text(PG_NAME, marginX+18, y+48);
+    docPdf.text(PG_ADDRESS, marginX+18, y+64, { maxWidth: 320 });
+
+    docPdf.setFont("helvetica","normal");
+    docPdf.setFontSize(10);
+    docPdf.text("Authorized Signatory", 410, y+85);
+    docPdf.line(410, y+70, 555, y+70);
+
+    y += 140;
+    docPdf.setFontSize(9);
+    docPdf.text("This is a computer-generated receipt.", marginX, y);
 
     const filename = `${PG_NAME.replace(/\s+/g,'_')}_Receipt_${receiptNo}.pdf`;
     docPdf.save(filename);
@@ -634,7 +711,7 @@ Receipt No: ${receiptNo}
           <td>₹${Number(t.rent||0).toLocaleString()}</td>
           <td>${esc(t.dueDay||"")}</td>
           <td><span class="pill">${esc(t.status||"")}</span></td>
-          <td>${lp}<div class="muted">${esc(t.lastPaidMethod||"")}</div></td>
+          <td>${lp}<div class="muted">${esc(t.lastPaidMethod||"")}</div><div class="muted">${esc(t.lastReceiptNo||"")}</div></td>
           <td>
             <a href="${waLinkRent(t)}" target="_blank">Rent Reminder</a><br/>
             <a href="${waLinkReceipt(t)}" target="_blank">Receipt Msg</a>
