@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>PG Tenant Manager (Firebase + WhatsApp Manual)</title>
+  <title>SRI RAJARAJESWARI PG — Tenant Manager</title>
   <style>
     :root{font-family:Arial, sans-serif;}
     body{margin:0;background:#f6f7fb;color:#111}
     header{background:#111827;color:#fff;padding:16px}
-    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .wrap{max-width:1150px;margin:0 auto;padding:16px}
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
     .grid{display:grid;gap:16px;grid-template-columns:1fr}
-    @media(min-width:900px){.grid{grid-template-columns:360px 1fr}}
+    @media(min-width:950px){.grid{grid-template-columns:380px 1fr}}
     h1{margin:0;font-size:18px}
     h2{margin:0 0 12px;font-size:16px}
     label{display:block;font-size:12px;margin:10px 0 6px;color:#374151}
@@ -25,7 +25,6 @@
     .row{display:flex;gap:10px;flex-wrap:wrap}
     .row>*{flex:1;min-width:140px}
     .muted{color:#6b7280;font-size:12px}
-    .hide{display:none}
     table{width:100%;border-collapse:collapse}
     th,td{text-align:left;padding:10px;border-bottom:1px solid #e5e7eb;font-size:13px;vertical-align:top}
     .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#eef2ff;color:#3730a3}
@@ -41,8 +40,8 @@
 <body>
 <header>
   <div class="wrap">
-    <h1>PG Tenant Manager — Firebase DB + Manual WhatsApp Reminder</h1>
-    <div class="muted">Cloud save (Firestore). Same data on mobile + laptop. Manual WhatsApp send with one click.</div>
+    <h1>SRI RAJARAJESWARI PG — Tenant Manager (Firebase + WhatsApp + PDF Receipt)</h1>
+    <div class="muted">Cloud save (Firestore). Manual WhatsApp reminder + Mark Paid + PDF rent receipt download.</div>
   </div>
 </header>
 
@@ -52,7 +51,7 @@
     <h2>Admin Login</h2>
     <div class="notice">
       Default login: <b>admin</b> / <b>admin123</b><br/>
-      Tip: Later you can change in code variables <code>ADMIN_USER</code> and <code>ADMIN_PASS</code>.
+      Change in code: <code>ADMIN_USER</code> and <code>ADMIN_PASS</code>.
     </div>
 
     <label>Username</label>
@@ -69,7 +68,7 @@
 
     <h2>Add / Edit Tenant</h2>
     <div class="warn">
-      Phone format: <b>10 digits</b> (India). WhatsApp link will add <b>+91</b> automatically.
+      Phone: <b>10 digits</b>. WhatsApp link adds <b>+91</b> automatically.
     </div>
 
     <input id="editId" type="hidden"/>
@@ -131,7 +130,7 @@
     </div>
 
     <div class="muted" style="margin-top:10px;">
-      If you see permission error: Firestore Rules must be in <b>Test mode</b> currently.
+      If permission error: Firestore Rules must be <b>Test mode</b> now.
     </div>
   </div>
 
@@ -139,7 +138,7 @@
   <div class="card">
     <h2>Tenants List</h2>
 
-    <div id="session" class="notice">Not logged in. (View only. Add/Edit needs admin login.)</div>
+    <div id="session" class="notice">Not logged in. (View only. Add/Edit/Paid/Receipt needs admin login.)</div>
 
     <div class="row" style="margin-top:10px;">
       <div>
@@ -158,10 +157,10 @@
 
     <div class="row" style="margin-top:10px;">
       <div>
-        <label>WhatsApp Message Template</label>
+        <label>WhatsApp Rent Reminder Template</label>
         <textarea id="msgTpl" rows="3"></textarea>
         <div class="muted">
-          Use tokens: <span class="pill">{name}</span> <span class="pill">{room}</span> <span class="pill">{rent}</span> <span class="pill">{dueDay}</span>
+          Tokens: <span class="pill">{name}</span> <span class="pill">{room}</span> <span class="pill">{rent}</span> <span class="pill">{dueDay}</span>
         </div>
       </div>
     </div>
@@ -177,23 +176,26 @@
     </div>
 
     <div class="muted" style="margin-top:10px;">
-      WhatsApp open link works best on phone. On laptop, it opens WhatsApp Web.
+      Receipt: Click <b>Mark Paid</b> → then <b>Receipt PDF</b> download → WhatsApp lo attach chesi send cheyyi.
     </div>
   </div>
 </div>
 
+<!-- jsPDF (for PDF receipts) -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
 <script type="module">
-  /* ---------------- Firebase (CDN) ---------------- */
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
   import {
     getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-  // Admin credentials (change if you want)
+  /* ---------------- SETTINGS YOU CAN CHANGE ---------------- */
+  const PG_NAME = "SRI RAJARAJESWARI PG";
   const ADMIN_USER = "admin";
   const ADMIN_PASS = "admin123";
 
-  // Your Firebase config (from your console)
+  // Firebase config (yours)
   const firebaseConfig = {
     apiKey: "AIzaSyDc1VMtz85nJ_bV8QZ3FMMZDUJSX8qj4m0",
     authDomain: "rajarajeswaripg-7ee87.firebaseapp.com",
@@ -204,40 +206,51 @@
     measurementId: "G-GHR6NYEGPX"
   };
 
+  /* ---------------- Firebase init ---------------- */
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   const tenantsCol = collection(db, "tenants");
 
   /* ---------------- Local settings ---------------- */
-  const LS_SESSION = "pg_admin_session_v1";
-  const LS_TPL = "pg_msg_tpl_v1";
+  const LS_SESSION = "pg_admin_session_v2";
+  const LS_TPL = "pg_msg_tpl_v2";
+
+  const $ = (id)=>document.getElementById(id);
 
   function loadSession(){ try{return JSON.parse(localStorage.getItem(LS_SESSION))||null}catch(e){return null} }
   function saveSession(s){ localStorage.setItem(LS_SESSION, JSON.stringify(s)); }
   function clearSession(){ localStorage.removeItem(LS_SESSION); }
+  function isLoggedIn(){ const s=loadSession(); return s && s.role==="admin"; }
 
   function loadTpl(){
-    const def = "Hi {name}, this is a rent reminder for Room {room}. Monthly rent ₹{rent}. Due date: {dueDay}. Please pay on time. Thank you.";
+    const def = "Hi {name}, rent reminder for Room {room}. Monthly rent ₹{rent}. Due date: {dueDay}. Please pay on time. Thank you.";
     return localStorage.getItem(LS_TPL) || def;
   }
   function saveTpl(v){ localStorage.setItem(LS_TPL, v); }
 
-  function isLoggedIn(){
-    const s = loadSession();
-    return s && s.role==="admin";
-  }
-
-  /* ---------------- UI helpers ---------------- */
-  const $ = (id)=>document.getElementById(id);
   function esc(s){
     return String(s ?? "")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
   }
   function clamp(n,a,b){ return Math.max(a,Math.min(b,n)); }
+  function pad2(n){ return String(n).padStart(2,"0"); }
+  function todayDDMMYYYY(){
+    const d = new Date();
+    return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
+  }
+  function monthKey(d=new Date()){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    return `${y}${m}`;
+  }
+  function monthLabelFromYYYYMM(yyyymm){
+    if(!yyyymm || yyyymm.length<6) return "";
+    const y = yyyymm.slice(0,4);
+    const m = Number(yyyymm.slice(4,6));
+    const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${names[m-1] || "Month"} ${y}`;
+  }
 
   function setDbStatusOk(msg){
     $("dbStatus").className = "ok";
@@ -248,10 +261,10 @@
     $("dbStatus").innerHTML = "<b>Database:</b> " + esc(msg);
   }
 
-  /* ---------------- App state ---------------- */
-  let TENANTS = []; // cached list
+  /* ---------------- State ---------------- */
+  let TENANTS = [];
 
-  /* ---------------- Auth ---------------- */
+  /* ---------------- Auth (UI only) ---------------- */
   window.login = function(){
     const u = $("u").value.trim();
     const p = $("p").value;
@@ -259,6 +272,7 @@
       saveSession({role:"admin"});
       renderSession();
       alert("Logged in ✅");
+      renderTable();
     } else alert("Wrong admin login.");
   };
 
@@ -266,18 +280,18 @@
     clearSession();
     renderSession();
     alert("Logged out.");
+    renderTable();
   };
 
   function renderSession(){
     $("session").innerHTML = isLoggedIn()
       ? "<b>Logged in as:</b> Admin ✅"
-      : "Not logged in. (View only. Add/Edit needs admin login.)";
+      : "Not logged in. (View only. Add/Edit/Paid/Receipt needs admin login.)";
   }
 
-  /* ---------------- CRUD (Firestore) ---------------- */
+  /* ---------------- Firestore CRUD ---------------- */
   async function fetchTenants(){
     const snap = await getDocs(tenantsCol);
-    // Sorting: latest first (client-side)
     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     list.sort((a,b)=>{
       const ta = a.createdAt?.seconds || 0;
@@ -289,7 +303,15 @@
   }
 
   async function addTenant(data){
-    await addDoc(tenantsCol, { ...data, createdAt: serverTimestamp() });
+    await addDoc(tenantsCol, {
+      ...data,
+      // payment fields
+      lastPaidYYYYMM: data.lastPaidYYYYMM || "",
+      lastPaidDate: data.lastPaidDate || "",
+      lastPaidMethod: data.lastPaidMethod || "",
+      lastReceiptNo: data.lastReceiptNo || "",
+      createdAt: serverTimestamp()
+    });
   }
 
   async function updateTenant(id, data){
@@ -378,8 +400,8 @@
     }
   };
 
-  /* ---------------- WhatsApp ---------------- */
-  function makeMsg(t){
+  /* ---------------- WhatsApp templates ---------------- */
+  function makeRentReminderMsg(t){
     const tpl = $("msgTpl").value;
     saveTpl(tpl);
     return tpl
@@ -389,15 +411,187 @@
       .replaceAll("{dueDay}", t.dueDay ?? "");
   }
 
-  function waLink(t){
+  function waLinkRent(t){
     const phone = "91" + String(t.phone || "").replace(/\D/g,'');
-    const text = encodeURIComponent(makeMsg(t));
+    const text = encodeURIComponent(makeRentReminderMsg(t));
     return `https://wa.me/${phone}?text=${text}`;
   }
 
+  function waReceiptText(t){
+    const mk = t.lastPaidYYYYMM || monthKey();
+    const monthTxt = monthLabelFromYYYYMM(mk) || "this month";
+    const receiptNo = t.lastReceiptNo || buildReceiptNo(t, mk);
+    const paidDate = t.lastPaidDate || todayDDMMYYYY();
+    const method = t.lastPaidMethod || "UPI";
+    return `RENT RECEIPT ✅
+PG: ${PG_NAME}
+Name: ${t.name || ""}
+Room: ${t.room || ""}
+Month: ${monthTxt}
+Amount: ₹${t.rent || ""}
+Paid Date: ${paidDate}
+Payment Method: ${method}
+Receipt No: ${receiptNo}
+
+(Receipt PDF attached)`;
+  }
+
+  function waLinkReceipt(t){
+    const phone = "91" + String(t.phone || "").replace(/\D/g,'');
+    const text = encodeURIComponent(waReceiptText(t));
+    return `https://wa.me/${phone}?text=${text}`;
+  }
+
+  /* ---------------- Payment + Receipt ---------------- */
+  function buildReceiptNo(t, yyyymm){
+    // deterministic unique-ish receipt number (no extra DB counter needed)
+    const tail = (t.id || "").slice(-4).toUpperCase();
+    return `SRRPG-${yyyymm}-${tail || "0000"}`;
+  }
+
+  window.markPaid = async function(id){
+    if(!isLoggedIn()){ alert("Admin login first."); return; }
+    const t = TENANTS.find(x=>x.id===id);
+    if(!t) return;
+
+    const mk = prompt("Paid month (YYYYMM). Example: 202601", t.lastPaidYYYYMM || monthKey());
+    if(!mk) return;
+    if(!/^\d{6}$/.test(mk)){ alert("Invalid month format. Use YYYYMM like 202601"); return; }
+
+    const paidDate = prompt("Paid date (DD/MM/YYYY)", t.lastPaidDate || todayDDMMYYYY());
+    if(!paidDate) return;
+
+    const method = prompt("Payment method (Cash / UPI / Bank)", t.lastPaidMethod || "UPI");
+    if(!method) return;
+
+    const receiptNo = buildReceiptNo(t, mk);
+
+    try{
+      await updateTenant(id, {
+        lastPaidYYYYMM: mk,
+        lastPaidDate: paidDate,
+        lastPaidMethod: method,
+        lastReceiptNo: receiptNo
+      });
+      await refresh();
+      alert("Marked paid ✅ Now click Receipt PDF to download.");
+    }catch(e){
+      console.error(e);
+      alert("Mark paid failed. Check Firestore rules.");
+      setDbStatusWarn("Error: " + (e?.message || e));
+    }
+  };
+
+  window.generateReceiptPDF = function(id){
+    if(!isLoggedIn()){ alert("Admin login first."); return; }
+    const t = TENANTS.find(x=>x.id===id);
+    if(!t) return;
+
+    const mk = t.lastPaidYYYYMM || monthKey();
+    const monthTxt = monthLabelFromYYYYMM(mk) || "Month";
+    const receiptNo = t.lastReceiptNo || buildReceiptNo(t, mk);
+    const paidDate = t.lastPaidDate || todayDDMMYYYY();
+    const method = t.lastPaidMethod || "UPI";
+    const amount = t.rent || "";
+
+    // jsPDF
+    const { jsPDF } = window.jspdf || {};
+    if(!jsPDF){
+      alert("PDF library not loaded. Refresh page and try again.");
+      return;
+    }
+
+    const docPdf = new jsPDF({ unit:"pt", format:"a4" });
+
+    const marginX = 40;
+    let y = 50;
+
+    docPdf.setFont("helvetica","bold");
+    docPdf.setFontSize(16);
+    docPdf.text(PG_NAME, marginX, y);
+
+    docPdf.setFont("helvetica","normal");
+    docPdf.setFontSize(11);
+    y += 18;
+    docPdf.text("RENT RECEIPT", marginX, y);
+
+    y += 18;
+    docPdf.setDrawColor(200);
+    docPdf.line(marginX, y, 555, y);
+
+    y += 22;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Receipt No:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(receiptNo), marginX+90, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Date:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(paidDate), marginX+90, y);
+
+    y += 22;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Tenant Name:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.name || ""), marginX+90, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Phone:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.phone || ""), marginX+90, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Room:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.room || ""), marginX+90, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Sharing:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(t.sharing || ""), marginX+90, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Month:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(monthTxt), marginX+90, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Amount Paid:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(`₹${amount}`, marginX+90, y);
+
+    y += 18;
+    docPdf.setFont("helvetica","bold");
+    docPdf.text("Payment Method:", marginX, y);
+    docPdf.setFont("helvetica","normal");
+    docPdf.text(String(method), marginX+110, y);
+
+    y += 22;
+    docPdf.setDrawColor(230);
+    docPdf.line(marginX, y, 555, y);
+
+    y += 30;
+    docPdf.setFont("helvetica","normal");
+    docPdf.setFontSize(11);
+    docPdf.text("This is a computer-generated receipt.", marginX, y);
+
+    y += 60;
+    docPdf.text("Authorized Signatory", 420, y);
+    docPdf.line(420, y-12, 555, y-12);
+
+    const filename = `${PG_NAME.replace(/\s+/g,'_')}_Receipt_${receiptNo}.pdf`;
+    docPdf.save(filename);
+  };
+
   /* ---------------- Table render ---------------- */
   window.renderTable = function(){
-    // template init
     const tplBox = $("msgTpl");
     if(!tplBox.value) tplBox.value = loadTpl();
 
@@ -425,11 +619,14 @@
 
     tbl.innerHTML = `
       <tr>
-        <th>Tenant</th><th>Room</th><th>Rent</th><th>Due</th><th>Status</th><th>WhatsApp</th><th>Actions</th>
+        <th>Tenant</th><th>Room</th><th>Rent</th><th>Due</th><th>Status</th><th>Last Paid</th><th>WhatsApp</th><th>Actions</th>
       </tr>
     `;
 
     list.forEach(t=>{
+      const lp = t.lastPaidYYYYMM ? `${monthLabelFromYYYYMM(t.lastPaidYYYYMM)} (${esc(t.lastPaidDate||"")})` : "—";
+      const receiptEnabled = !!t.lastPaidYYYYMM;
+
       tbl.innerHTML += `
         <tr>
           <td><b>${esc(t.name)}</b><div class="muted">${esc(t.phone)}<br>${esc(t.notes||"")}</div></td>
@@ -437,15 +634,20 @@
           <td>₹${Number(t.rent||0).toLocaleString()}</td>
           <td>${esc(t.dueDay||"")}</td>
           <td><span class="pill">${esc(t.status||"")}</span></td>
+          <td>${lp}<div class="muted">${esc(t.lastPaidMethod||"")}</div></td>
           <td>
-            <a href="${waLink(t)}" target="_blank">Open WhatsApp</a>
-            <div class="muted">One-click reminder</div>
+            <a href="${waLinkRent(t)}" target="_blank">Rent Reminder</a><br/>
+            <a href="${waLinkReceipt(t)}" target="_blank">Receipt Msg</a>
+            <div class="muted">Attach PDF manually</div>
           </td>
           <td>
             <div class="actions">
               <button class="gray" onclick="editTenant('${t.id}')">Edit</button>
+              <button class="black" onclick="markPaid('${t.id}')">Mark Paid</button>
+              <button class="white" onclick="generateReceiptPDF('${t.id}')" ${receiptEnabled ? "" : "disabled"}>Receipt PDF</button>
               <button class="danger" onclick="delTenant('${t.id}')">Delete</button>
             </div>
+            <div class="muted">Receipt PDF enabled after Mark Paid</div>
           </td>
         </tr>
       `;
@@ -487,9 +689,8 @@
       const text = await file.text();
       let arr;
       try{ arr = JSON.parse(text); }catch(e){ alert("Invalid JSON file."); return; }
-
       if(!Array.isArray(arr)){ alert("JSON must be an array of tenants."); return; }
-      if(!confirm("This will ADD tenants from file (it will not delete existing). Continue?")) return;
+      if(!confirm("This will ADD tenants from file (won't delete existing). Continue?")) return;
 
       try{
         for(const t of arr){
@@ -502,6 +703,10 @@
             dueDay: clamp(Number(t.dueDay||5),1,28),
             status: t.status || "Active",
             notes: String(t.notes||"").trim(),
+            lastPaidYYYYMM: String(t.lastPaidYYYYMM||"").trim(),
+            lastPaidDate: String(t.lastPaidDate||"").trim(),
+            lastPaidMethod: String(t.lastPaidMethod||"").trim(),
+            lastReceiptNo: String(t.lastReceiptNo||"").trim()
           };
           if(!payload.name || payload.phone.length!==10 || !payload.room || !payload.rent) continue;
           await addTenant(payload);
