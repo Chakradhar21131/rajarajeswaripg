@@ -656,8 +656,35 @@ Receipt No: ${receiptNo}
 
     docPdf.setFont("helvetica","normal");
     docPdf.setFontSize(10);
-    docPdf.text("Authorized Signatory", 410, y+85);
-    docPdf.line(410, y+70, 555, y+70);
+  // Authorized signature + PG seal block
+docPdf.setFont("helvetica","normal");
+docPdf.setFontSize(10);
+
+// signature line
+docPdf.line(410, y+70, 555, y+70);
+
+// label
+docPdf.text("Authorized Signatory", 410, y+85);
+
+// name under signature
+docPdf.setFont("helvetica","bold");
+docPdf.setFontSize(11);
+docPdf.text("V Chakradhar", 410, y+102);
+
+// ---- ROUND PG SEAL (LEFT SIDE) ----
+try {
+  const sealData = await toDataURL("seal.png");
+  docPdf.addImage(sealData, "PNG", 330, y+38, 70, 70, undefined, "FAST");
+} catch (e) {
+  docPdf.setDrawColor(150);
+  docPdf.circle(365, y+72, 32);
+  docPdf.setFont("helvetica","bold");
+  docPdf.setFontSize(9);
+  docPdf.text("SRI", 353, y+66);
+  docPdf.text("RAJARAJESWARI", 330, y+78);
+  docPdf.text("PG", 360, y+92);
+}
+
 
     y += 140;
     docPdf.setFontSize(9);
